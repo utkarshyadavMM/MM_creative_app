@@ -84,6 +84,43 @@
         <div class="h-0.5 w-full bg-slate-100"><div id="notification-toast-progress" class="h-full w-full bg-blue-500"></div></div>
     </div>
 
+    <div id="et-summary-tooltip" role="region" aria-label="ET progress details" aria-hidden="true" class="pointer-events-auto fixed z-[100] hidden w-64 scale-95 -translate-y-1 rounded-xl border border-slate-200/80 bg-white/95 p-3 opacity-0 shadow-xl shadow-slate-900/15 backdrop-blur-xl transition-all duration-200 ease-out">
+        <div class="mb-2 flex items-start justify-between gap-2">
+            <div class="flex min-w-0 items-center gap-2">
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                    <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                </span>
+                <div class="min-w-0">
+                    <p class="text-[8px] font-extrabold uppercase tracking-[0.14em] text-slate-400">ET progress</p>
+                    <p id="et-summary-name" class="truncate text-xs font-extrabold text-slate-800"></p>
+                </div>
+            </div>
+            <span id="et-summary-status" class="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-amber-700 ring-1 ring-amber-100"></span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+            <div data-et-list="done" tabindex="0" role="group" aria-label="Show completed creatives" class="cursor-pointer rounded-lg bg-emerald-50/80 px-1.5 py-1.5 text-center ring-1 ring-emerald-100 transition hover:ring-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                <p class="text-[8px] font-bold uppercase tracking-wider text-emerald-700">Done</p>
+                <p id="et-summary-done" class="mt-0.5 text-base font-black leading-5 text-emerald-700"></p>
+            </div>
+            <div data-et-list="remaining" tabindex="0" role="group" aria-label="Show remaining creatives" class="cursor-pointer rounded-lg bg-amber-50/80 px-1.5 py-1.5 text-center ring-1 ring-amber-100 transition hover:ring-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                <p class="text-[8px] font-bold uppercase tracking-wider text-amber-700">Remaining</p>
+                <p id="et-summary-remaining" class="mt-0.5 text-base font-black leading-5 text-amber-700"></p>
+            </div>
+            <div data-et-list="total" tabindex="0" role="group" aria-label="Show all creatives" class="cursor-pointer rounded-lg bg-slate-50 px-1.5 py-1.5 text-center ring-1 ring-slate-200 transition hover:ring-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <p class="text-[8px] font-bold uppercase tracking-wider text-slate-500">Total</p>
+                <p id="et-summary-total" class="mt-0.5 text-base font-black leading-5 text-slate-700"></p>
+            </div>
+        </div>
+        <div class="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
+            <div id="et-summary-progress" class="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-300"></div>
+        </div>
+        <p id="et-summary-percent" class="mt-1 text-right text-[8px] font-bold text-slate-400"></p>
+        <div id="et-summary-creative-list" class="mt-2 hidden border-t border-slate-100 pt-2">
+            <p id="et-summary-list-title" class="mb-1 text-[9px] font-extrabold uppercase tracking-wider text-slate-500"></p>
+            <ul id="et-summary-list-items" class="max-h-24 space-y-1 overflow-y-auto pr-1 text-[10px] font-semibold text-slate-700"></ul>
+        </div>
+    </div>
+
     <!-- Top Navigation Bar -->
     <header class="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm shrink-0">
         <div class="px-3 py-3 flex flex-col gap-3 max-w-[1600px] mx-auto w-full sm:px-6 sm:py-4 sm:gap-4">
@@ -1552,6 +1589,135 @@
             })[character]);
         }
 
+        let etSummaryTooltipHideTimer;
+        let etSummaryTooltipShowTimer;
+        let activeETSummaryTarget = null;
+
+        function positionETSummaryTooltip(target, tooltip) {
+            const targetRect = target.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const margin = 12;
+            let left = targetRect.left + (targetRect.width - tooltipRect.width) / 2;
+            left = Math.max(margin, Math.min(left, window.innerWidth - tooltipRect.width - margin));
+            let top = targetRect.bottom + 10;
+            if (top + tooltipRect.height > window.innerHeight - margin) {
+                top = targetRect.top - tooltipRect.height - 10;
+            }
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${Math.max(margin, top)}px`;
+        }
+
+        function showETSummaryTooltip(target) {
+            const tooltip = document.getElementById('et-summary-tooltip');
+            const done = Number(target.dataset.etDone);
+            const remaining = Number(target.dataset.etRemaining);
+            const total = Number(target.dataset.etTotal);
+            const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+            clearTimeout(etSummaryTooltipShowTimer);
+            clearTimeout(etSummaryTooltipHideTimer);
+            activeETSummaryTarget = target;
+            document.getElementById('et-summary-creative-list').classList.add('hidden');
+            document.getElementById('et-summary-name').textContent = target.dataset.etName;
+            const status = document.getElementById('et-summary-status');
+            status.textContent = remaining === 0 ? 'Complete' : 'In progress';
+            status.className = remaining === 0
+                ? 'shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100'
+                : 'shrink-0 rounded-full bg-amber-50 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-amber-700 ring-1 ring-amber-100';
+            document.getElementById('et-summary-done').textContent = done.toLocaleString();
+            document.getElementById('et-summary-remaining').textContent = remaining.toLocaleString();
+            document.getElementById('et-summary-total').textContent = total.toLocaleString();
+            document.getElementById('et-summary-progress').style.width = `${percent}%`;
+            document.getElementById('et-summary-percent').textContent = `${percent}% complete`;
+            tooltip.classList.remove('hidden');
+            tooltip.setAttribute('aria-hidden', 'false');
+            positionETSummaryTooltip(target, tooltip);
+            requestAnimationFrame(() => tooltip.classList.remove('opacity-0', '-translate-y-1', 'scale-95'));
+        }
+
+        function showETCreativeList(card) {
+            const type = card.dataset.etList;
+            const names = JSON.parse(activeETSummaryTarget?.dataset[`et${type[0].toUpperCase()}${type.slice(1)}List`] || '[]');
+            const list = document.getElementById('et-summary-creative-list');
+            const items = document.getElementById('et-summary-list-items');
+            const labels = { done: 'Completed creatives', remaining: 'Remaining creatives', total: 'All creatives' };
+            const icons = {
+                done: 'fa-solid fa-check text-emerald-500',
+                remaining: 'fa-regular fa-clock text-amber-500',
+                total: 'fa-regular fa-file-lines text-slate-400'
+            };
+            document.getElementById('et-summary-list-title').textContent = `${labels[type]} (${names.length})`;
+            items.innerHTML = names.length
+                ? names.map(name => `<li class="flex items-start gap-1.5"><i class="${icons[type]} mt-0.5 w-3 shrink-0" aria-hidden="true"></i><span class="break-words">${escapeHtml(name)}</span></li>`).join('')
+                : '<li class="text-slate-400">No creatives in this category.</li>';
+            list.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                if (activeETSummaryTarget) positionETSummaryTooltip(activeETSummaryTarget, document.getElementById('et-summary-tooltip'));
+            });
+        }
+
+        function hideETSummaryTooltip() {
+            const tooltip = document.getElementById('et-summary-tooltip');
+            clearTimeout(etSummaryTooltipShowTimer);
+            etSummaryTooltipHideTimer = setTimeout(() => {
+                tooltip.classList.add('opacity-0', '-translate-y-1', 'scale-95');
+                tooltip.setAttribute('aria-hidden', 'true');
+                setTimeout(() => {
+                    if (tooltip.getAttribute('aria-hidden') === 'true') {
+                        tooltip.classList.add('hidden');
+                        activeETSummaryTarget = null;
+                    }
+                }, 200);
+            }, 650);
+        }
+
+        document.addEventListener('pointerover', event => {
+            const tooltip = document.getElementById('et-summary-tooltip');
+            if (tooltip.contains(event.target)) {
+                clearTimeout(etSummaryTooltipHideTimer);
+                const card = event.target.closest('[data-et-list]');
+                if (card && !card.contains(event.relatedTarget)) showETCreativeList(card);
+                return;
+            }
+            const target = event.target.closest('[data-et-summary]');
+            if (target && !target.contains(event.relatedTarget)) {
+                clearTimeout(etSummaryTooltipHideTimer);
+                clearTimeout(etSummaryTooltipShowTimer);
+                etSummaryTooltipShowTimer = setTimeout(() => showETSummaryTooltip(target), 300);
+            }
+        });
+        document.addEventListener('pointerout', event => {
+            const tooltip = document.getElementById('et-summary-tooltip');
+            if (tooltip.contains(event.target)) {
+                if (!tooltip.contains(event.relatedTarget) && !activeETSummaryTarget?.contains(event.relatedTarget)) hideETSummaryTooltip();
+                return;
+            }
+            const target = event.target.closest('[data-et-summary]');
+            if (target && !target.contains(event.relatedTarget) && !tooltip.contains(event.relatedTarget)) hideETSummaryTooltip();
+        });
+        document.addEventListener('focusin', event => {
+            const card = event.target.closest('[data-et-list]');
+            if (card) {
+                showETCreativeList(card);
+                return;
+            }
+            const target = event.target.closest('[data-et-summary]');
+            if (target) showETSummaryTooltip(target);
+        });
+        document.addEventListener('focusout', event => {
+            if (event.target.closest('[data-et-list]')) {
+                if (document.getElementById('et-summary-tooltip').contains(event.relatedTarget)) return;
+            }
+            const target = event.target.closest('[data-et-summary]');
+            if (target && !target.contains(event.relatedTarget)) hideETSummaryTooltip();
+        });
+        document.addEventListener('keydown', event => {
+            const target = event.target.closest('[data-et-summary][role="button"]');
+            if (target && (event.key === 'Enter' || event.key === ' ')) {
+                event.preventDefault();
+                target.click();
+            }
+        });
+
         function getSafeTabColor(color) {
             return typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color) ? color : '';
         }
@@ -2914,8 +3080,12 @@
             if (pendingETNames.length > 0) {
                 pendingContainer.classList.remove('hidden');
                 pendingList.innerHTML = pendingETNames.map(et => {
-                    const tabColor = groupedByET[et].items[0]?.tab_color;
-                    return `<span class="bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 transition-colors" onclick="openETGroup('et-${btoa(unescape(encodeURIComponent(et))).replace(/[^a-zA-Z0-9]/g, '')}', '${et.replace(/'/g, "\\'")}')">
+                    const group = groupedByET[et];
+                    const tabColor = group.items[0]?.tab_color;
+                    const doneNames = group.items.filter(isCreativeDone).map(item => item.et);
+                    const remainingNames = group.items.filter(item => !isCreativeDone(item)).map(item => item.et);
+                    const allNames = group.items.map(item => item.et);
+                    return `<span data-et-summary data-et-name="${escapeHtml(et)}" data-et-done="${group.done}" data-et-remaining="${group.pending}" data-et-total="${group.total}" data-et-done-list="${escapeHtml(JSON.stringify(doneNames))}" data-et-remaining-list="${escapeHtml(JSON.stringify(remainingNames))}" data-et-total-list="${escapeHtml(JSON.stringify(allNames))}" aria-describedby="et-summary-tooltip" tabindex="0" role="button" class="bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer hover:bg-amber-100 transition-colors" onclick="openETGroup('et-${btoa(unescape(encodeURIComponent(et))).replace(/[^a-zA-Z0-9]/g, '')}', '${et.replace(/'/g, "\\'")}')">
                         <i class="fa-solid fa-folder-open text-amber-500"></i> <span${tabColorStyleAttribute(tabColor)}>${escapeHtml(et)}</span>
                     </span>`;
                 }).join('');
@@ -2931,11 +3101,15 @@
             
             if (doneETNames.length > 0) {
                 doneContainer.classList.remove('hidden');
-                doneList.innerHTML = doneETNames.map(et => 
-                    `<span class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 transition-colors" onclick="openETGroup('et-${btoa(unescape(encodeURIComponent(et))).replace(/[^a-zA-Z0-9]/g, '')}', '${et.replace(/'/g, "\\'")}')">
-                        <i class="fa-solid fa-check-circle text-emerald-500"></i> ${et}
-                    </span>`
-                ).join('');
+                doneList.innerHTML = doneETNames.map(et => {
+                    const group = groupedByET[et];
+                    const doneNames = group.items.filter(isCreativeDone).map(item => item.et);
+                    const remainingNames = group.items.filter(item => !isCreativeDone(item)).map(item => item.et);
+                    const allNames = group.items.map(item => item.et);
+                    return `<span data-et-summary data-et-name="${escapeHtml(et)}" data-et-done="${group.done}" data-et-remaining="${group.pending}" data-et-total="${group.total}" data-et-done-list="${escapeHtml(JSON.stringify(doneNames))}" data-et-remaining-list="${escapeHtml(JSON.stringify(remainingNames))}" data-et-total-list="${escapeHtml(JSON.stringify(allNames))}" aria-describedby="et-summary-tooltip" tabindex="0" role="button" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 transition-colors" onclick="openETGroup('et-${btoa(unescape(encodeURIComponent(et))).replace(/[^a-zA-Z0-9]/g, '')}', '${et.replace(/'/g, "\\'")}')">
+                        <i class="fa-solid fa-check-circle text-emerald-500"></i> ${escapeHtml(et)}
+                    </span>`;
+                }).join('');
             } else {
                 doneContainer.classList.add('hidden');
                 doneList.innerHTML = '';
@@ -2951,10 +3125,13 @@
                 const isExpanded = (expandedGroups[etName] === true) || (searchEtVal !== "") || (creativeFinderVal !== "");
                 const rowClass = isExpanded ? "" : "hidden";
                 const iconClass = isExpanded ? "rotate-90" : "";
+                const doneNames = group.items.filter(isCreativeDone).map(item => item.et);
+                const remainingNames = group.items.filter(item => !isCreativeDone(item)).map(item => item.et);
+                const allNames = group.items.map(item => item.et);
                 
                 // Group Header Row (Clickable)
                 html += `
-                    <tr id="header-${safeId}" class="bg-blue-50/60 border-y border-blue-100/50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="toggleGroup('${safeId}', '${etName.replace(/'/g, "\\'")}')">
+                    <tr id="header-${safeId}" data-et-summary data-et-name="${escapeHtml(etName)}" data-et-done="${group.done}" data-et-remaining="${group.pending}" data-et-total="${group.total}" data-et-done-list="${escapeHtml(JSON.stringify(doneNames))}" data-et-remaining-list="${escapeHtml(JSON.stringify(remainingNames))}" data-et-total-list="${escapeHtml(JSON.stringify(allNames))}" aria-describedby="et-summary-tooltip" tabindex="0" role="button" class="bg-blue-50/60 border-y border-blue-100/50 cursor-pointer hover:bg-blue-100 transition-colors" onclick="toggleGroup('${safeId}', '${etName.replace(/'/g, "\\'")}')">
                         <td colspan="4" class="py-3 px-8">
                             <div class="flex items-center justify-between">
                                 <div class="font-black text-blue-900 text-sm tracking-wide uppercase flex items-center">
